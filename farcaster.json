@@ -1,0 +1,19 @@
+{
+  "_note": "accountAssociation not required — Base App uses base.dev registration from April 2026",
+  "miniapp": {
+    "version": "1",
+    "name": "MetalBase",
+    "homeUrl": "https://DOMAIN_PLACEHOLDER",
+    "iconUrl": "https://DOMAIN_PLACEHOLDER/icon.png",
+    "splashImageUrl": "https://DOMAIN_PLACEHOLDER/splash.png",
+    "splashBackgroundColor": "#0a0800",
+    "subtitle": "Gold · Silver · Copper vs USD",
+    "description": "Live precious metals vs USD converter. Every conversion logs permanently on Base blockchain. Includes Mini App Builder.",
+    "primaryCategory": "finance",
+    "tags": ["gold", "silver", "copper", "metals", "defi", "base", "converter"],
+    "tagline": "Precious metals on-chain",
+    "ogTitle": "MetalBase — Gold · Silver · Copper on Base",
+    "ogDescription": "Convert precious metals vs USD. Every query logs on Base.",
+    "ogImageUrl": "https://DOMAIN_PLACEHOLDER/og.png"
+  }
+}

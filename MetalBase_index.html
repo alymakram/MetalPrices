@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MetalBase — Gold · Silver · Copper vs USD</title>
+<meta name="base:app_id" content="BASEID_PLACEHOLDER"/>
+<meta name="description" content="Live gold, silver & copper vs USD converter. Every conversion logs on Base blockchain."/>
+<meta property="og:title" content="MetalBase — Precious Metals on Base"/>
+<meta property="og:description" content="Gold · Silver · Copper vs USD. Every conversion triggers a Base transaction."/>
+<meta property="og:image" content="https://DOMAIN_PLACEHOLDER/og.png"/>
+<meta property="og:url" content="https://DOMAIN_PLACEHOLDER"/>
+<meta name="fc:miniapp" content='{"version":"1","name":"MetalBase","iconUrl":"https://DOMAIN_PLACEHOLDER/icon.png","homeUrl":"https://DOMAIN_PLACEHOLDER","splashImageUrl":"https://DOMAIN_PLACEHOLDER/splash.png","splashBackgroundColor":"#0a0800","buttonTitle":"Open MetalBase"}' />
+
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0a0800;
+  --surface:#100e00;
+  --surface2:#181400;
+  --border:#2a2310;
+  --gold:#d4af37;
+  --gold2:#f0d060;
+  --silver:#C0C0C0;
+  --copper:#b87333;
+  --base:#0052ff;
+  --txt:#e8e0c0;
+  --muted:#6b6040;
+  --green:#4caf50;
+  --red:#ef5350;
+  --radius:10px;
+  --mono:'JetBrains Mono',monospace;
+  --serif:'Cormorant Garamond',serif;
+}
+
+html,body{min-height:100%;background:var(--bg);color:var(--txt);font-family:var(--serif);overflow-x:hidden}
+
+/* grain overlay */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size:200px 200px;pointer-events:none;opacity:.6;
+}
+
+/* grid lines */
+body::after{
+  content:'';position:fixed;inset:0;z-index:0;
+  background-image:linear-gradient(rgba(212,175,55,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(212,175,55,.03) 1px,transparent 1px);
+  background-size:60px 60px;pointer-events:none;
+}
+
+#root{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 24px;
+  border-bottom:1px solid var(--border);
+  background:rgba(10,8,0,.85);
+  backdrop-filter:blur(16px);
+  position:sticky;top:0;z-index:100;
+}
+.logo{
+  font-family:var(--serif);font-size:1.6rem;font-weight:700;
+  letter-spacing:.02em;color:var(--gold);
+  display:flex;align-items:center;gap:10px;
+}
+.logo .sub{font-size:.7rem;color:var(--muted);font-family:var(--mono);letter-spacing:.1em;display:block;margin-top:-4px}
+
+#connectBtn{
+  font-family:var(--mono);font-size:.72rem;
+  padding:9px 18px;border-radius:99px;
+  border:1px solid var(--gold);
+  background:transparent;color:var(--gold);
+  cursor:pointer;transition:all .2s;letter-spacing:.05em;
+}
+#connectBtn:hover{background:var(--gold);color:var(--bg)}
+#connectBtn.connected{border-color:var(--green);color:var(--green)}
+
+/* ── Tabs ── */
+.tabs{
+  display:flex;gap:2px;padding:20px 24px 0;
+  border-bottom:1px solid var(--border);
+  background:rgba(10,8,0,.5);
+}
+.tab{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;
+  padding:10px 18px;border-radius:var(--radius) var(--radius) 0 0;
+  border:1px solid transparent;border-bottom:none;
+  background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;
+}
+.tab.active{
+  background:var(--surface);border-color:var(--border);
+  color:var(--gold);border-bottom-color:var(--surface);margin-bottom:-1px;z-index:1;
+}
+.tab:hover:not(.active){color:var(--txt)}
+
+.panel{display:none;padding:24px;flex:1;flex-direction:column;gap:20px}
+.panel.active{display:flex}
+
+/* ── Cards ── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px;
+}
+.card-title{
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:16px;
+}
+
+/* ── Price Tickers ── */
+.tickers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:600px){.tickers{grid-template-columns:1fr}}
+
+.ticker{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 16px;
+  position:relative;overflow:hidden;cursor:pointer;
+  transition:border-color .2s,transform .15s;
+}
+.ticker:hover{transform:translateY(-2px)}
+.ticker.gold-card{border-color:#2a1f00}
+.ticker.silver-card{border-color:#1e1e1e}
+.ticker.copper-card{border-color:#1e0e00}
+.ticker.gold-card:hover{border-color:var(--gold)}
+.ticker.silver-card:hover{border-color:var(--silver)}
+.ticker.copper-card:hover{border-color:var(--copper)}
+
+.ticker::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.gold-card::before{background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.silver-card::before{background:linear-gradient(90deg,#888,var(--silver))}
+.copper-card::before{background:linear-gradient(90deg,var(--copper),#d4924d)}
+
+.ticker-symbol{
+  font-family:var(--mono);font-size:.65rem;letter-spacing:.15em;
+  color:var(--muted);margin-bottom:6px;
+}
+.ticker-name{
+  font-family:var(--serif);font-size:1.1rem;font-weight:600;
+  margin-bottom:10px;
+}
+.gold-card .ticker-name{color:var(--gold)}
+.silver-card .ticker-name{color:var(--silver)}
+.copper-card .ticker-name{color:var(--copper)}
+
+.ticker-price{
+  font-family:var(--mono);font-size:1.4rem;font-weight:600;color:var(--txt);
+}
+.ticker-unit{
+  font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-top:4px;
+}
+.ticker-updated{
+  font-family:var(--mono);font-size:.6rem;color:var(--muted);
+  margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+}
+
+/* ── Converter ── */
+.converter-wrap{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:860px}
+@media(max-width:660px){.converter-wrap{grid-template-columns:1fr}}
+
+.metal-selector{display:flex;gap:6px;margin-bottom:16px}
+.metal-btn{
+  font-family:var(--mono);font-size:.72rem;
+  padding:8px 14px;border-radius:6px;
+  border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:all .2s;letter-spacing:.05em;
+}
+.metal-btn.active-gold{border-color:var(--gold);color:var(--gold);background:#1a1400}
+.metal-btn.active-silver{border-color:var(--silver);color:var(--silver);background:#141414}
+.metal-btn.active-copper{border-color:var(--copper);color:var(--copper);background:#14080000}
+.metal-btn:hover{border-color:var(--txt)}
+
+.input-row{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.input-row label{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.input-row input,.input-row select{
+  font-family:var(--mono);font-size:.9rem;
+  padding:11px 14px;border-radius:8px;
+  border:1px solid var(--border);background:#08070000;
+  color:var(--txt);outline:none;transition:border-color .2s;
+  background-color:#08060000;
+}
+.input-row input{background-color:#0d0a00}
+.input-row select{background-color:#0d0a00}
+.input-row input:focus,.input-row select:focus{border-color:var(--gold)}
+
+.result-box{
+  background:#060500;border:1px solid var(--border);
+  border-radius:8px;padding:16px;text-align:center;
+  margin-bottom:14px;min-height:80px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.result-label{font-family:var(--mono);font-size:.62rem;color:var(--muted);letter-spacing:.1em;margin-bottom:6px}
+.result-value{font-family:var(--serif);font-size:2rem;font-weight:700;color:var(--gold);line-height:1}
+.result-sub{font-family:var(--mono);font-size:.7rem;color:var(--muted);margin-top:4px}
+
+/* direction toggle */
+.dir-toggle{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-bottom:14px;
+}
+.dir-btn{
+  font-family:var(--mono);font-size:.72rem;padding:7px 16px;
+  border-radius:6px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;
+}
+.dir-btn.active{background:var(--surface2);border-color:var(--gold);color:var(--gold)}
+
+.convert-btn{
+  width:100%;font-family:var(--mono);font-size:.8rem;
+  padding:13px;border-radius:8px;border:none;
+  background:linear-gradient(135deg,#c4a020,#d4af37,#e8c840);
+  color:var(--bg);cursor:pointer;font-weight:600;
+  letter-spacing:.06em;transition:all .2s;
+}
+.convert-btn:hover{opacity:.9;transform:translateY(-1px)}
+.convert-btn:disabled{background:var(--muted);cursor:not-allowed;transform:none}
+
+/* ── TX Status ── */
+#txStatus{
+  font-family:var(--mono);font-size:.7rem;
+  padding:10px 14px;border-radius:8px;
+  background:#060500;border:1px solid var(--border);
+  color:var(--muted);display:flex;align-items:center;gap:8px;
+  word-break:break-all;min-height:38px;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+#txStatus.pending .dot{background:#ffd600;animation:pulse 1s infinite}
+#txStatus.success .dot{background:var(--green)}
+#txStatus.fail .dot{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── History ── */
+.history-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+.hist-item{
+  display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;
+  padding:10px 12px;border-radius:6px;
+  background:#060500;border:1px solid var(--border);
+}
+.hist-metal{
+  font-family:var(--mono);font-size:.62rem;padding:3px 8px;
+  border-radius:99px;
+}
+.hist-metal.GOLD{border:1px solid var(--gold);color:var(--gold)}
+.hist-metal.SILVER{border:1px solid var(--silver);color:var(--silver)}
+.hist-metal.COPPER{border:1px solid var(--copper);color:var(--copper)}
+.hist-detail{font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+.hist-result{font-family:var(--mono);font-size:.78rem;color:var(--gold);text-align:right}
+
+/* ── Owner Panel ── */
+.owner-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+@media(max-width:600px){.owner-grid{grid-template-columns:1fr}}
+
+.price-input-wrap{display:flex;flex-direction:column;gap:4px}
+.price-input-wrap label{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase}
+.price-input-wrap label.gold-lbl{color:var(--gold)}
+.price-input-wrap label.silver-lbl{color:var(--silver)}
+.price-input-wrap label.copper-lbl{color:var(--copper)}
+.price-input-wrap input{
+  font-family:var(--mono);font-size:.85rem;
+  padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:#0d0a00;color:var(--txt);outline:none;transition:border-color .2s;
+}
+
+/* ── Mini App Builder ── */
+.builder-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:960px}
+@media(max-width:720px){.builder-grid{grid-template-columns:1fr}}
+
+.form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.form-group label{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.form-group input,.form-group textarea,.form-group select{
+  font-family:var(--mono);font-size:.8rem;
+  padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+  background:#0d0a00;color:var(--txt);outline:none;resize:vertical;transition:border-color .2s;
+}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:var(--gold)}
+
+.primary-btn{
+  font-family:var(--mono);font-size:.78rem;padding:11px 22px;
+  border-radius:8px;border:none;
+  background:linear-gradient(135deg,#c4a020,#d4af37);
+  color:var(--bg);cursor:pointer;font-weight:600;transition:all .2s;letter-spacing:.05em;
+}
+.primary-btn:hover{opacity:.9;transform:translateY(-1px)}
+.primary-btn:disabled{background:var(--muted);cursor:not-allowed;transform:none}
+
+.app-card{
+  padding:12px 14px;border-radius:8px;
+  background:#060500;border:1px solid var(--border);transition:border-color .2s;
+  margin-bottom:8px;
+}
+.app-card:hover{border-color:var(--gold)}
+.app-card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.app-card-name{font-family:var(--serif);font-size:1rem;font-weight:600;color:var(--gold)}
+.app-badge{
+  font-family:var(--mono);font-size:.6rem;padding:3px 8px;
+  border-radius:99px;border:1px solid var(--green);color:var(--green);
+}
+.app-badge.inactive{border-color:var(--muted);color:var(--muted)}
+.app-config{
+  font-family:var(--mono);font-size:.65rem;color:var(--muted);
+  white-space:pre-wrap;word-break:break-all;max-height:70px;overflow:hidden;line-height:1.5;
+}
+.app-meta{font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-top:6px}
+
+#previewFrame{
+  width:100%;min-height:260px;border-radius:8px;
+  border:1px solid var(--border);background:#fff;margin-top:10px;
+}
+
+/* ── Toast ── */
+#toast{
+  position:fixed;bottom:24px;right:24px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px 18px;
+  font-family:var(--mono);font-size:.75rem;color:var(--txt);
+  z-index:9999;transform:translateY(80px);opacity:0;
+  transition:all .3s cubic-bezier(.4,0,.2,1);max-width:340px;
+}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{border-color:var(--green);color:var(--green)}
+#toast.error{border-color:var(--red);color:var(--red)}
+#toast.gold{border-color:var(--gold);color:var(--gold)}
+
+/* scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+/* live pulse */
+.live-dot{
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--green);animation:pulse 2s infinite;margin-right:5px;vertical-align:middle;
+}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{animation:fadeIn .4s ease both}
+</style>
+</head>
+<body>
+<div id="root">
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    ⬡ MetalBase
+    <span class="sub">GOLD · SILVER · COPPER ON BASE</span>
+  </div>
+  <button id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
+</header>
+
+<!-- ── Tabs ── -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('prices',this)">◈ Live Prices</button>
+  <button class="tab" onclick="switchTab('convert',this)">⇄ Convert</button>
+  <button class="tab" onclick="switchTab('history',this)">◷ History</button>
+  <button class="tab" onclick="switchTab('builder',this)">⬡ Mini Apps</button>
+  <button class="tab" id="ownerTab" onclick="switchTab('owner',this)" style="display:none">⚙ Owner</button>
+</div>
+
+<!-- ══════════════ PRICES ══════════════ -->
+<div id="panel-prices" class="panel active">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <h2 style="font-family:var(--serif);font-size:1.4rem;color:var(--gold);font-weight:400;font-style:italic">
+      Precious Metals vs US Dollar
+    </h2>
+    <span style="font-family:var(--mono);font-size:.65rem;color:var(--muted)">
+      <span class="live-dot"></span>On-chain prices · Base Mainnet
+    </span>
+  </div>
+
+  <div class="tickers">
+    <div class="ticker gold-card" onclick="selectMetal(0)">
+      <div class="ticker-symbol">XAU / USD</div>
+      <div class="ticker-name">Gold</div>
+      <div class="ticker-price" id="goldPrice">—</div>
+      <div class="ticker-unit">per troy oz</div>
+      <div class="ticker-updated" id="goldUpdated">Loading…</div>
+    </div>
+    <div class="ticker silver-card" onclick="selectMetal(1)">
+      <div class="ticker-symbol">XAG / USD</div>
+      <div class="ticker-name" style="color:var(--silver)">Silver</div>
+      <div class="ticker-price" id="silverPrice">—</div>
+      <div class="ticker-unit">per troy oz</div>
+      <div class="ticker-updated" id="silverUpdated">Loading…</div>
+    </div>
+    <div class="ticker copper-card" onclick="selectMetal(2)">
+      <div class="ticker-symbol">XCU / USD</div>
+      <div class="ticker-name" style="color:var(--copper)">Copper</div>
+      <div class="ticker-price" id="copperPrice">—</div>
+      <div class="ticker-unit">per troy oz</div>
+      <div class="ticker-updated" id="copperUpdated">Loading…</div>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:600px">
+    <div class="card-title">Quick Reference — Common Weights</div>
+    <div id="quickRef" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px"></div>
+  </div>
+
+  <div id="txStatus" style="max-width:600px">
+    <span class="dot"></span>
+    <span id="txMsg">Connect wallet to log conversions on Base.</span>
+  </div>
+</div>
+
+<!-- ══════════════ CONVERTER ══════════════ -->
+<div id="panel-convert" class="panel">
+<div class="converter-wrap">
+
+  <div class="card">
+    <div class="card-title">Select Metal</div>
+    <div class="metal-selector">
+      <button class="metal-btn active-gold" id="mbtn0" onclick="selectMetal(0)">Au Gold</button>
+      <button class="metal-btn" id="mbtn1" onclick="selectMetal(1)">Ag Silver</button>
+      <button class="metal-btn" id="mbtn2" onclick="selectMetal(2)">Cu Copper</button>
+    </div>
+
+    <div class="dir-toggle">
+      <button class="dir-btn active" id="dir0" onclick="setDir(0)">Metal → USD</button>
+      <button class="dir-btn" id="dir1" onclick="setDir(1)">USD → Metal</button>
+    </div>
+
+    <div id="inputWrap">
+      <div class="input-row">
+        <label id="inputLabel">Weight</label>
+        <input id="amountInput" type="number" min="0" step="any" placeholder="0.00" oninput="calcPreview()"/>
+      </div>
+      <div class="input-row">
+        <label id="unitLabel">Unit</label>
+        <select id="unitSelect" onchange="calcPreview()">
+          <option value="31103.477">Troy Ounce (ozt)</option>
+          <option value="1000">Gram (g)</option>
+          <option value="31103.477">Kilo (kg) — select kg below</option>
+          <option value="1">Milligram (mg)</option>
+          <option value="28349.5">Ounce (oz)</option>
+          <option value="453592">Pound (lb)</option>
+          <option value="31103477">Kilogram (kg)</option>
+          <option value="1000000">Tonne (t) — metric ton</option>
+        </select>
+      </div>
+      <div class="input-row" id="memoRow">
+        <label>Memo (optional)</label>
+        <input id="memoInput" type="text" placeholder="e.g. ring purchase, portfolio check…"/>
+      </div>
+    </div>
+
+    <div class="result-box">
+      <div class="result-label" id="resultLabel">Result</div>
+      <div class="result-value" id="resultValue">—</div>
+      <div class="result-sub" id="resultSub"></div>
+    </div>
+
+    <button class="convert-btn" onclick="doConvert()" id="convertBtn">
+      ⬡ Convert &amp; Log on Base
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Current Prices</div>
+    <div id="convPrices" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+
+    <div class="card-title" style="margin-top:8px">Formula</div>
+    <div style="font-family:var(--mono);font-size:.72rem;color:var(--muted);line-height:1.8;background:#060500;padding:12px;border-radius:8px;border:1px solid var(--border)">
+      <div>Metal → USD:</div>
+      <div style="color:var(--gold);margin-left:8px">result = weight_mg × price / 31,103,477</div>
+      <div style="margin-top:6px">USD → Metal:</div>
+      <div style="color:var(--gold);margin-left:8px">result = usd × 31,103,477 / price</div>
+      <div style="margin-top:8px;color:var(--muted)">Prices in USD cents · Weight in mg</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════ HISTORY ══════════════ -->
+<div id="panel-history" class="panel">
+  <div style="max-width:700px">
+    <div class="card">
+      <div class="card-title">Your On-Chain Conversions</div>
+      <div class="history-list" id="historyList">
+        <p style="font-family:var(--mono);font-size:.75rem;color:var(--muted)">Connect wallet to see your history.</p>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="primary-btn" onclick="loadHistory()" style="font-size:.72rem;padding:9px 16px">↻ Refresh</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MINI APP BUILDER ══════════════ -->
+<div id="panel-builder" class="panel">
+<div class="builder-grid">
+
+  <div class="card">
+    <div class="card-title">Deploy Mini App on Base</div>
+
+    <div class="form-group">
+      <label>App Name</label>
+      <input id="appName" placeholder="My Metal Tracker"/>
+    </div>
+    <div class="form-group">
+      <label>Template</label>
+      <select id="appTemplate" onchange="loadTemplate()">
+        <option value="">— choose template —</option>
+        <option value="gold-ticker">Gold Price Ticker</option>
+        <option value="portfolio">Metals Portfolio</option>
+        <option value="alert">Price Alert Widget</option>
+        <option value="swap">Metal/USD Swap UI</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Config JSON (stored on-chain)</label>
+      <textarea id="appConfig" rows="6" placeholder='{"type":"ticker","metal":"gold","theme":"dark"}'></textarea>
+    </div>
+    <div class="form-group">
+      <label>HTML Preview</label>
+      <textarea id="appHtml" rows="5" placeholder="<div>...</div>" oninput="updatePreview()"></textarea>
+    </div>
+    <button class="primary-btn" onclick="deployApp()" id="deployBtn">⬡ Deploy to Base</button>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card" style="flex:0 0 auto">
+      <div class="card-title">Live Preview</div>
+      <iframe id="previewFrame" sandbox="allow-scripts" srcdoc="<p style='padding:20px;color:#666;font-family:monospace'>Select a template or write HTML…</p>"></iframe>
+    </div>
+    <div class="card" style="flex:1">
+      <div class="card-title">Your Apps <span id="appCount" style="color:var(--gold)">—</span></div>
+      <div id="appsList">
+        <p style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">Connect wallet to see your apps.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════ OWNER ══════════════ -->
+<div id="panel-owner" class="panel">
+  <div style="max-width:700px">
+    <div class="card">
+      <div class="card-title">⚙ Update Metal Prices (Owner Only)</div>
+      <p style="font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-bottom:16px">
+        Enter prices in USD cents per troy oz.<br>
+        Example: $3,130.00 gold = enter 313000
+      </p>
+      <div class="owner-grid">
+        <div class="price-input-wrap">
+          <label class="gold-lbl">Gold (cents/ozt)</label>
+          <input id="goldInput" type="number" placeholder="313000" style="border-color:#2a1f00"/>
+        </div>
+        <div class="price-input-wrap">
+          <label class="silver-lbl">Silver (cents/ozt)</label>
+          <input id="silverInput" type="number" placeholder="3380" style="border-color:#1e1e1e"/>
+        </div>
+        <div class="price-input-wrap">
+          <label class="copper-lbl">Copper (cents/ozt)</label>
+          <input id="copperInput" type="number" placeholder="489" style="border-color:#1e0e00"/>
+        </div>
+      </div>
+      <button class="primary-btn" onclick="updateAllPrices()" style="margin-top:4px">
+        ⬡ Update All Prices on Base
+      </button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /root -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════
+const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"; // ← replace after deploy
+const OWNER_ADDRESS    = "0xdBF45AF1cD37deBEDD059BEe0525289d2b5E5CF4".toLowerCase();
+const BASE_CHAIN_ID    = "0x2105"; // 8453
+
+const ABI = [
+  "function getAllPrices() view returns (uint256,uint256,uint256,uint256,uint256,uint256)",
+  "function getPrice(uint8 metal) view returns (uint256,uint256,address)",
+  "function previewConvert(uint8 metal,uint256 weightMg) view returns (uint256)",
+  "function convert(uint8 metal,uint256 weightMg,string note) returns (uint256)",
+  "function convertUsdToMetal(uint8 metal,uint256 usdCents,string note) returns (uint256)",
+  "function updatePrice(uint8 metal,uint256 usdCentsPerTroyOz)",
+  "function updateAllPrices(uint256 gold,uint256 silver,uint256 copper)",
+  "function deployMiniApp(string name,string config) returns (uint256)",
+  "function toggleMiniApp(uint256 appId)",
+  "function getConversionsCount() view returns (uint256)",
+  "function getUserConversions(address user) view returns (uint256[])",
+  "function getUserApps(address user) view returns (uint256[])",
+  "function conversions(uint256) view returns (address,uint8,uint256,uint256,uint256,uint256,string)",
+  "function miniApps(uint256) view returns (address,string,string,uint256,bool)",
+  "event PriceUpdated(uint8 indexed metal,uint256 usdCentsPerTroyOz,address updatedBy,uint256 timestamp)",
+  "event Converted(address indexed user,uint8 indexed metal,uint256 weightMg,uint256 priceUsdCents,uint256 resultUsdCents,uint256 timestamp,string note)",
+  "event MiniAppDeployed(address indexed creator,uint256 appId,string name,uint256 timestamp)"
+];
+
+// ════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════
+let provider, signer, contract;
+let walletAddress = null;
+let selectedMetal = 0; // 0=gold,1=silver,2=copper
+let direction = 0;     // 0=metal→usd, 1=usd→metal
+const METAL_NAMES  = ["Gold","Silver","Copper"];
+const METAL_COLORS = ["var(--gold)","var(--silver)","var(--copper)"];
+const METAL_SYMS   = ["Au","Ag","Cu"];
+const MG_PER_TROY  = 31_103_477;
+
+// cached prices (cents)
+let cachedPrices = [313_000_00, 3380, 489];
+
+// ════════════════════════════════════════════
+//  Wallet
+// ════════════════════════════════════════════
+async function connectWallet() {
+  if (!window.ethereum) { showToast("Install MetaMask or Coinbase Wallet","error"); return; }
+  try {
+    await window.ethereum.request({ method:"eth_requestAccounts" });
+    try {
+      await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:BASE_CHAIN_ID}] });
+    } catch(sw) {
+      if (sw.code===4902) await window.ethereum.request({
+        method:"wallet_addEthereumChain",
+        params:[{ chainId:BASE_CHAIN_ID, chainName:"Base",
+          nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},
+          rpcUrls:["https://mainnet.base.org"],
+          blockExplorerUrls:["https://basescan.org"] }]
+      });
+    }
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer   = await provider.getSigner();
+    walletAddress = (await signer.getAddress()).toLowerCase();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+    const btn = document.getElementById("connectBtn");
+    btn.textContent = walletAddress.slice(0,6)+"…"+walletAddress.slice(-4);
+    btn.classList.add("connected");
+
+    if (walletAddress === OWNER_ADDRESS) {
+      document.getElementById("ownerTab").style.display = "";
+    }
+
+    setTxStatus("idle","Connected on Base ⬡ — ready to log conversions");
+    showToast("Wallet connected ✓","success");
+    loadChainPrices();
+    loadHistory();
+    loadApps();
+  } catch(e) {
+    showToast(e.message||"Connection failed","error");
+  }
+}
+
+// ════════════════════════════════════════════
+//  Prices
+// ════════════════════════════════════════════
+async function loadChainPrices() {
+  if (!contract) { renderPrices(); return; }
+  try {
+    const r = await contract.getAllPrices();
+    cachedPrices = [Number(r[0]), Number(r[2]), Number(r[4])];
+    const timestamps = [Number(r[1]), Number(r[3]), Number(r[5])];
+    renderPrices(timestamps);
+    renderQuickRef();
+    renderConvPrices();
+  } catch(e) {
+    renderPrices();
+    console.warn(e);
+  }
+}
+
+function centsToUsd(cents) {
+  return "$" + (cents / 100).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function renderPrices(timestamps) {
+  const ids = ["goldPrice","silverPrice","copperPrice"];
+  const updIds = ["goldUpdated","silverUpdated","copperUpdated"];
+  ids.forEach((id,i) => {
+    document.getElementById(id).textContent = centsToUsd(cachedPrices[i]);
+    if (timestamps) {
+      const d = new Date(timestamps[i]*1000);
+      document.getElementById(updIds[i]).textContent = "Updated: "+d.toLocaleString();
+    }
+  });
+}
+
+function renderQuickRef() {
+  const weights = [
+    {label:"1 mg",    mg:1},
+    {label:"1 g",     mg:1000},
+    {label:"1 oz",    mg:28349.5},
+    {label:"1 ozt",   mg:31103.477},
+    {label:"10 g",    mg:10000},
+    {label:"100 g",   mg:100000},
+    {label:"1 kg",    mg:1_000_000},
+  ];
+  const el = document.getElementById("quickRef");
+  el.innerHTML = "";
+  weights.forEach(w => {
+    const div = document.createElement("div");
+    div.style.cssText = "background:#060500;border:1px solid var(--border);border-radius:8px;padding:10px;";
+    div.innerHTML = `<div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:6px">${w.label}</div>
+      <div style="font-family:var(--mono);font-size:.72rem;color:var(--gold)">${centsToUsd(Math.round(w.mg*cachedPrices[0]/MG_PER_TROY))}</div>
+      <div style="font-family:var(--mono);font-size:.65rem;color:var(--silver)">${centsToUsd(Math.round(w.mg*cachedPrices[1]/MG_PER_TROY))}</div>
+      <div style="font-family:var(--mono);font-size:.65rem;color:var(--copper)">${centsToUsd(Math.round(w.mg*cachedPrices[2]/MG_PER_TROY))}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderConvPrices() {
+  const el = document.getElementById("convPrices");
+  const colors = ["var(--gold)","var(--silver)","var(--copper)"];
+  el.innerHTML = METAL_NAMES.map((n,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#060500;border-radius:6px;border:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-size:.72rem;color:${colors[i]}">${METAL_SYMS[i]} ${n}</span>
+      <span style="font-family:var(--mono);font-size:.85rem;color:var(--txt)">${centsToUsd(cachedPrices[i])}<span style="font-size:.6rem;color:var(--muted)">/ozt</span></span>
+    </div>`).join("");
+}
+
+// ════════════════════════════════════════════
+//  Converter
+// ════════════════════════════════════════════
+function selectMetal(m) {
+  selectedMetal = m;
+  [0,1,2].forEach(i => {
+    const btn = document.getElementById("mbtn"+i);
+    btn.className = "metal-btn";
+    if(i===m) btn.classList.add("active-"+["gold","silver","copper"][i]);
+  });
+  calcPreview();
+}
+
+function setDir(d) {
+  direction = d;
+  document.getElementById("dir0").classList.toggle("active", d===0);
+  document.getElementById("dir1").classList.toggle("active", d===1);
+  if (d===0) {
+    document.getElementById("inputLabel").textContent = "Weight";
+    document.getElementById("unitLabel").textContent  = "Unit";
+    document.getElementById("memoRow").style.display  = "";
+    document.getElementById("unitSelect").style.display = "";
+  } else {
+    document.getElementById("inputLabel").textContent = "USD Amount ($)";
+    document.getElementById("unitLabel").textContent  = "—";
+    document.getElementById("unitSelect").style.display = "none";
+  }
+  calcPreview();
+}
+
+function calcPreview() {
+  const raw = parseFloat(document.getElementById("amountInput").value)||0;
+  if (!raw) { document.getElementById("resultValue").textContent="—"; return; }
+
+  const price = cachedPrices[selectedMetal];
+  let result, label, sub;
+
+  if (direction===0) {
+    const mgPerUnit = parseFloat(document.getElementById("unitSelect").value)||31103.477;
+    const mg = raw * mgPerUnit;
+    const cents = Math.round(mg * price / MG_PER_TROY);
+    result = centsToUsd(cents);
+    label  = `${raw} ${getUnitName()} of ${METAL_NAMES[selectedMetal]}`;
+    sub    = `@ ${centsToUsd(price)}/ozt`;
+  } else {
+    const cents = Math.round(raw * 100);
+    const mg    = (cents * MG_PER_TROY) / price;
+    const ozt   = mg / 31103.477;
+    result = ozt.toFixed(4) + " ozt";
+    label  = `$${raw.toFixed(2)} USD → ${METAL_NAMES[selectedMetal]}`;
+    sub    = `${(mg/1000).toFixed(4)} g · ${(mg/1000000).toFixed(6)} kg`;
+  }
+
+  document.getElementById("resultValue").textContent = result;
+  document.getElementById("resultLabel").textContent = label;
+  document.getElementById("resultSub").textContent   = sub;
+}
+
+function getUnitName() {
+  const sel = document.getElementById("unitSelect");
+  return sel.options[sel.selectedIndex].text.split("(")[0].trim();
+}
+
+async function doConvert() {
+  if (!contract) { showToast("Connect wallet first","error"); return; }
+  const raw  = parseFloat(document.getElementById("amountInput").value)||0;
+  if (!raw)  { showToast("Enter a value","error"); return; }
+  const memo = document.getElementById("memoInput").value||"";
+  const btn  = document.getElementById("convertBtn");
+  btn.disabled = true; btn.textContent = "⏳ Sending…";
+  setTxStatus("pending","Sending conversion to Base…");
+
+  try {
+    let tx;
+    if (direction===0) {
+      const mgPerUnit = parseFloat(document.getElementById("unitSelect").value)||31103.477;
+      const mg = BigInt(Math.round(raw * mgPerUnit));
+      tx = await contract.convert(selectedMetal, mg, memo);
+    } else {
+      const cents = BigInt(Math.round(raw * 100));
+      tx = await contract.convertUsdToMetal(selectedMetal, cents, memo);
+    }
+    setTxStatus("pending","Tx sent: "+tx.hash.slice(0,14)+"…");
+    const receipt = await tx.wait();
+    const short = tx.hash.slice(0,10)+"…"+tx.hash.slice(-6);
+    setTxStatus("success",`✓ Confirmed | ${short} | Block ${receipt.blockNumber}`);
+    showToast(`✓ ${METAL_NAMES[selectedMetal]} conversion logged on Base`,"gold");
+    loadHistory();
+  } catch(e) {
+    setTxStatus("fail","Tx failed: "+(e.shortMessage||e.message));
+    showToast("Transaction failed","error");
+  } finally {
+    btn.disabled=false; btn.textContent="⬡ Convert & Log on Base";
+  }
+}
+
+// ════════════════════════════════════════════
+//  History
+// ════════════════════════════════════════════
+async function loadHistory() {
+  if (!contract||!walletAddress) return;
+  try {
+    const idxs = await contract.getUserConversions(walletAddress);
+    const list = document.getElementById("historyList");
+    list.innerHTML = "";
+    if (!idxs.length) {
+      list.innerHTML='<p style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">No conversions yet.</p>';
+      return;
+    }
+    for (let i=idxs.length-1; i>=Math.max(0,idxs.length-40); i--) {
+      const c = await contract.conversions(idxs[i]);
+      const metal = Number(c[1]);
+      const mg    = Number(c[2]);
+      const res   = Number(c[4]);
+      const ts    = new Date(Number(c[5])*1000).toLocaleString();
+      const item  = document.createElement("div");
+      item.className = "hist-item";
+      const ozt = (mg/31103.477).toFixed(4);
+      item.innerHTML = `
+        <span class="hist-metal ${["GOLD","SILVER","COPPER"][metal]}">${METAL_SYMS[metal]}</span>
+        <span class="hist-detail">${ozt} ozt · ${ts}${c[6]?` · "${escHtml(c[6])}"`:""}</span>
+        <span class="hist-result">${centsToUsd(res)}</span>`;
+      list.appendChild(item);
+    }
+  } catch(e) { console.warn(e); }
+}
+
+// ════════════════════════════════════════════
+//  Owner price update
+// ════════════════════════════════════════════
+async function updateAllPrices() {
+  if (!contract) { showToast("Connect wallet first","error"); return; }
+  const g = parseInt(document.getElementById("goldInput").value)||0;
+  const s = parseInt(document.getElementById("silverInput").value)||0;
+  const c = parseInt(document.getElementById("copperInput").value)||0;
+  if (!g||!s||!c) { showToast("Enter all three prices","error"); return; }
+  setTxStatus("pending","Updating prices on Base…");
+  try {
+    const tx = await contract.updateAllPrices(BigInt(g),BigInt(s),BigInt(c));
+    setTxStatus("pending","Tx: "+tx.hash.slice(0,14)+"…");
+    await tx.wait();
+    cachedPrices = [g,s,c];
+    renderPrices(); renderQuickRef(); renderConvPrices();
+    setTxStatus("success","✓ Prices updated on Base");
+    showToast("✓ All prices updated","gold");
+  } catch(e) {
+    setTxStatus("fail","Failed: "+(e.shortMessage||e.message));
+    showToast("Update failed","error");
+  }
+}
+
+// ════════════════════════════════════════════
+//  Mini App Builder
+// ════════════════════════════════════════════
+const TEMPLATES = {
+  "gold-ticker": {
+    config: JSON.stringify({type:"gold-ticker",metal:"gold",theme:"dark",showChart:false},null,2),
+    html:`<style>body{margin:0;background:#0a0800;color:#e8e0c0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh}</style>
+<div style="text-align:center;padding:20px">
+  <div style="font-size:.8rem;color:#6b6040;letter-spacing:.2em;margin-bottom:8px">XAU / USD</div>
+  <div style="font-size:3.5rem;font-weight:700;color:#d4af37">$3,130.00</div>
+  <div style="font-size:.75rem;color:#6b6040;margin-top:6px">per troy ounce · Base ⬡</div>
+  <div style="margin-top:20px;padding:10px 20px;background:#1a1400;border:1px solid #2a2310;border-radius:8px;font-size:.8rem;color:#8B7536">Live on-chain price</div>
+</div>`
+  },
+  "portfolio": {
+    config: JSON.stringify({type:"portfolio",metals:["gold","silver","copper"],currency:"USD"},null,2),
+    html:`<style>body{margin:0;background:#0a0800;color:#e8e0c0;font-family:monospace;padding:20px}</style>
+<h3 style="color:#d4af37;margin-bottom:16px;font-size:1rem">⬡ Metals Portfolio</h3>
+<div style="display:flex;flex-direction:column;gap:8px">
+  <div style="background:#100e00;border:1px solid #2a2310;border-radius:8px;padding:12px;display:flex;justify-content:space-between">
+    <span style="color:#d4af37">Au Gold</span><span>$3,130.00/ozt</span>
+  </div>
+  <div style="background:#100e00;border:1px solid #2a2310;border-radius:8px;padding:12px;display:flex;justify-content:space-between">
+    <span style="color:#C0C0C0">Ag Silver</span><span>$33.80/ozt</span>
+  </div>
+  <div style="background:#100e00;border:1px solid #2a2310;border-radius:8px;padding:12px;display:flex;justify-content:space-between">
+    <span style="color:#b87333">Cu Copper</span><span>$4.89/ozt</span>
+  </div>
+</div>`
+  },
+  "alert": {
+    config: JSON.stringify({type:"price-alert",metal:"gold",threshold:3200,direction:"above"},null,2),
+    html:`<style>body{margin:0;background:#0a0800;color:#e8e0c0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh}</style>
+<div style="background:#100e00;border:1px solid #2a2310;border-radius:12px;padding:24px;width:300px;text-align:center">
+  <div style="font-size:2rem;margin-bottom:8px">🔔</div>
+  <div style="color:#d4af37;font-size:1rem;margin-bottom:4px">Gold Price Alert</div>
+  <div style="color:#6b6040;font-size:.8rem;margin-bottom:16px">Alert when Au &gt; $3,200</div>
+  <input placeholder="Set threshold $" style="width:100%;background:#0a0800;border:1px solid #2a2310;border-radius:6px;padding:8px;color:#e8e0c0;margin-bottom:10px;font-family:monospace">
+  <button style="width:100%;background:#d4af37;border:none;border-radius:6px;padding:10px;color:#0a0800;cursor:pointer;font-weight:700">Set Alert on Base</button>
+</div>`
+  },
+  "swap": {
+    config: JSON.stringify({type:"swap",fromAsset:"USD",toAsset:"gold",slippage:0.5},null,2),
+    html:`<style>body{margin:0;background:#0a0800;color:#e8e0c0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh}</style>
+<div style="background:#100e00;border:1px solid #2a2310;border-radius:12px;padding:24px;width:300px">
+  <div style="color:#d4af37;margin-bottom:16px;font-size:1rem">⇄ Metal Swap</div>
+  <div style="background:#0a0800;border:1px solid #2a2310;border-radius:8px;padding:12px;margin-bottom:6px">
+    <div style="font-size:.65rem;color:#6b6040;margin-bottom:4px">FROM</div>
+    <input placeholder="0.00 USD" style="width:100%;background:transparent;border:none;color:#e8e0c0;font-size:1.2rem;font-family:monospace;outline:none">
+  </div>
+  <div style="text-align:center;padding:4px;color:#d4af37">⇅</div>
+  <div style="background:#0a0800;border:1px solid #2a2310;border-radius:8px;padding:12px;margin-bottom:14px">
+    <div style="font-size:.65rem;color:#6b6040;margin-bottom:4px">TO (Au Gold)</div>
+    <div style="font-size:1.2rem;color:#d4af37">0.0000 ozt</div>
+  </div>
+  <button style="width:100%;background:linear-gradient(135deg,#c4a020,#d4af37);border:none;border-radius:8px;padding:12px;color:#0a0800;font-weight:700;cursor:pointer">Swap on Base ⬡</button>
+</div>`
+  }
+};
+
+function loadTemplate() {
+  const t = document.getElementById("appTemplate").value;
+  if (!t||!TEMPLATES[t]) return;
+  document.getElementById("appConfig").value = TEMPLATES[t].config;
+  document.getElementById("appHtml").value   = TEMPLATES[t].html;
+  updatePreview();
+}
+function updatePreview() {
+  const html = document.getElementById("appHtml").value;
+  document.getElementById("previewFrame").srcdoc = html||"<p style='padding:20px;color:#666;font-family:monospace'>Preview…</p>";
+}
+async function deployApp() {
+  if (!contract) { showToast("Connect wallet first","error"); return; }
+  const name   = document.getElementById("appName").value.trim();
+  const config = document.getElementById("appConfig").value.trim();
+  if (!name)   { showToast("Enter an app name","error"); return; }
+  if (!config) { showToast("Add a config JSON","error"); return; }
+  const btn = document.getElementById("deployBtn");
+  btn.disabled=true; btn.textContent="⏳ Deploying…";
+  setTxStatus("pending","Deploying mini app to Base…");
+  try {
+    const tx = await contract.deployMiniApp(name,config);
+    setTxStatus("pending","Tx: "+tx.hash.slice(0,14)+"…");
+    const receipt = await tx.wait();
+    setTxStatus("success","✓ App deployed | Block "+receipt.blockNumber);
+    showToast(`✓ "${name}" deployed on Base!`,"gold");
+    document.getElementById("appName").value="";
+    loadApps();
+  } catch(e) {
+    setTxStatus("fail","Deploy failed: "+(e.shortMessage||e.message));
+    showToast("Deploy failed","error");
+  } finally { btn.disabled=false; btn.textContent="⬡ Deploy to Base"; }
+}
+async function loadApps() {
+  if (!contract||!walletAddress) return;
+  try {
+    const idxs = await contract.getUserApps(walletAddress);
+    document.getElementById("appCount").textContent = idxs.length;
+    const list = document.getElementById("appsList");
+    list.innerHTML="";
+    if (!idxs.length) {
+      list.innerHTML='<p style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">No apps deployed yet.</p>';
+      return;
+    }
+    for (let i=idxs.length-1;i>=0;i--) {
+      const app = await contract.miniApps(idxs[i]);
+      const card = document.createElement("div");
+      card.className="app-card";
+      const d = new Date(Number(app[3])*1000).toLocaleString();
+      card.innerHTML=`
+        <div class="app-card-hd">
+          <span class="app-card-name">${escHtml(app[1])}</span>
+          <span class="app-badge ${app[4]?'':'inactive'}">${app[4]?'Active':'Paused'}</span>
+        </div>
+        <div class="app-config">${escHtml(app[2].slice(0,180))}${app[2].length>180?'…':''}</div>
+        <div class="app-meta">ID #${idxs[i]} · ${d} · <a href="https://basescan.org/address/${CONTRACT_ADDRESS}" target="_blank" style="color:var(--gold)">Basescan ↗</a></div>`;
+      list.appendChild(card);
+    }
+  } catch(e) { console.warn(e); }
+}
+
+// ════════════════════════════════════════════
+//  Helpers
+// ════════════════════════════════════════════
+function setTxStatus(state,msg) {
+  const el=document.getElementById("txStatus");
+  el.className=state;
+  document.getElementById("txMsg").textContent=msg;
+}
+function showToast(msg,type="") {
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.className="show "+type;
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className="",3500);
+}
+function switchTab(id,el) {
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("panel-"+id).classList.add("active");
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// init
+renderPrices(); renderQuickRef(); renderConvPrices(); calcPreview();
+setDir(0); selectMetal(0);
+</script>
+</body>
+</html>
